@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<!--
+  ShortRack — South Portland Metro APA · tell us what you are missing (v0.1)
+  ─────────────────────────────────────────────────────────────────────────────
+  Brief: tools/claude/briefs/2026-09-19-shortrack.md
+  WHO   a signed-in member (shared magic link, spm-auth.js, one session across every SPM app).
+  WHAT  ONE required question: what do you need. A kind chip and a team chip are optional and exist to ROUTE,
+        never to constrain. The list of things people need is unbounded, so the free text is the record and the
+        chip is only a hint. Deliberately not a catalogue.
+  WHY   these arrive by text, in person, or not at all, and they get lost. This gives them a queue and a receipt.
+  DATA  everything through the apa-mailer GAS (text/plain POST, never application/json):
+        sr_link_request · sr_verify · sr_logout · sr_context · sr_submit · sr_my.
+        No direct Supabase reads except the updater row. shortrack.requests is RLS-on, service-role only.
+  MAIL  sign-in link (to the address on file) · receipt to the requester that asks the follow-up questions and
+        invites a reply · office notify. Outcomes come from Slate ▸ Requests.
+  Brand: spm-base.css. Auto-updater: apa_core.apps row "ShortRack" → version.js (serve-then-bump).
+  Copy rule: no em-dashes in anything a player reads, and no minimum length on any answer.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>ShortRack — South Portland Metro APA</title>
+<meta name="theme-color" content="#ea002a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%8E%B1%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://southportlandmetroapa.github.io/shared/spm-base.css">
+<script src="version.js"></script>
+<script src="https://southportlandmetroapa.github.io/shared/spm-auth.js"></script>
+<style>
+  [hidden]{ display:none !important; }
+  .spm-page{ max-width:560px; }
+  .lead{ color:var(--muted); margin:2px 0 14px; font-size:.98rem; }
+  .lbl{ font-weight:800; font-size:1.02rem; margin:18px 0 6px; display:block; color:var(--text); }
+  .lbl small{ font-weight:400; color:var(--muted); font-size:.85rem; }
+  .sub{ color:var(--muted); font-size:.88rem; margin:0 0 8px; }
+  input[type=text],input[type=email],select,textarea{ width:100%; font:inherit; padding:13px 14px; border:2px solid var(--border); border-radius:12px; background:#fff; min-height:48px; color:var(--text); box-sizing:border-box; }
+  textarea{ min-height:130px; resize:vertical; }
+  input:focus,select:focus,textarea:focus{ outline:none; border-color:var(--spm-accent); }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ border:2px solid var(--border); background:#fff; border-radius:999px; padding:10px 14px; font:inherit; font-size:.95rem; min-height:48px; cursor:pointer; color:var(--text); text-align:left; }
+  .chip[aria-pressed="true"]{ border-color:var(--spm-accent); background:#eef2ff; color:var(--spm-accent); font-weight:700; }
+  .btn{ width:100%; font:inherit; font-weight:800; font-size:1.05rem; border:none; border-radius:999px; padding:15px 20px; min-height:54px; cursor:pointer; background:linear-gradient(135deg,var(--spm-primary),var(--spm-accent)); color:#fff; margin-top:14px; }
+  .btn:disabled{ background:#c9ccd6; cursor:not-allowed; }
+  .btn.ghost{ background:#fff; color:var(--text); border:2px solid var(--border); }
+  .err{ color:var(--spm-primary); font-size:.92rem; min-height:1.2em; margin:8px 0 0; }
+  .fine{ color:var(--muted); font-size:.82rem; text-align:center; margin:10px 0 0; }
+  .hp{ position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+  .ctl{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin:0 0 10px; }
+  .ctl button{ background:none; border:none; color:var(--spm-accent); font:inherit; font-weight:700; cursor:pointer; min-height:40px; padding:6px 0; }
+  .card-list .row{ border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px; font-size:.92rem; }
+  .tag{ display:inline-block; font-size:.7rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; padding:2px 8px; border-radius:999px; background:#fff3cd; color:#7a5a00; }
+  .tag.working{ background:#e7edfb; color:#0031a1; } .tag.done{ background:#e6f7ec; color:#0a7d33; } .tag.declined{ background:#f1f3f5; color:#4b5563; }
+  .spin{ display:inline-block; width:26px; height:26px; border:3px solid #e5e7eb; border-top-color:var(--spm-primary); border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .need{ margin:10px 0 0; font-size:.88rem; line-height:1.45; color:#7a5a00; background:#fff8e1; border:1px solid #f0e0a8; border-radius:10px; padding:8px 10px; }
+  .need b{ font-weight:800; }
+  .need:empty{ display:none; border:0; padding:0; margin:0; }
+  #updateOverlay{ position:fixed; inset:0; background:rgba(255,255,255,.96); z-index:9999; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; text-align:center; padding:24px; }
+  #updateOverlay.show{ display:flex; }
+</style>
+</head>
+<body>
+  <div id="updateOverlay"><div class="spin"></div><div><b>Updating…</b><br>Grabbing the latest version.</div></div>
+  <div class="spm-page spm-wide">
+    <header class="spm-header">
+      <h1>ShortRack 🎱</h1>
+      <p class="spm-subtitle">South Portland Metro APA · tell us what you are missing</p>
+    </header>
+    <div class="spm-shell">
+      <main class="spm-card">
+        <div class="ctl" id="ctl" hidden><span id="whoami" class="sub" style="margin:0"></span><button type="button" id="logout">Log out</button></div>
+        <div id="app"></div>
+      </main>
+      <aside class="spm-rail" id="rail" aria-live="polite"></aside>
+    </div>
+  </div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbzGTzkBRTrIIP_tD6sbtOOUmNZkXDdtxPoO4c8fdWt5h3tZFueNSISPv8Q3LWStx73Whw/exec';
+  const SB_URL = 'https://dqzbekoaysgaiqljueac.supabase.co';
+  const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxemJla29heXNnYWlxbGp1ZWFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNzA5NzgsImV4cCI6MjA5MDc0Njk3OH0.cCdGxZ4zEFzU_r6lWSDeoNWG67Q4MSYCAtpds035dfU';
+  const APP_NAME = 'ShortRack';
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  /* GAS: text/plain body, never application/json (CORS preflight GAS cannot answer) */
+  const gas = (action, extra) => fetch(GAS_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action }, extra || {})) }).then(r => r.json()).catch(() => ({ ok: false, error: 'Network hiccup. Check your connection and try again.' }));
+  const S = { token: null, firstName: '', me: null, kind: null, team: null, forTeam: false, opened: Date.now() };
+  const app = $('app');
+  /* A ROUTING hint, never the record. The thing people need is whatever they typed. */
+  const KINDS = [['patch', 'Patch or award'], ['nameplate', 'Nameplate'], ['trophy', 'Trophy or plaque'],
+                 ['jacket', 'Jacket'], ['supplies', 'Scoresheets or supplies'], ['other', 'Something else']];
+  const STATUS_LABEL = { new: 'new', working: 'working on it', done: 'sorted', declined: 'no' };
+
+  /* ── screens ── */
+  function showLogin(msg) {
+    renderRail();                     /* the signed-out screen keeps no trace of the last person's work */
+    $('ctl').hidden = true;
+    app.innerHTML = '<p class="lead">Missing a nameplate, a patch, a trophy, a jacket, anything at all? Tell us here and we will sort it. One thing per request, so it lands on the right list. Sign in with the email or APA number on your record. We send a link, no password.</p>'
+      + (msg ? '<div class="err" style="margin-bottom:8px">' + esc(msg) + '</div>' : '')
+      + '<label class="lbl" for="ident">Your email or APA number</label><input id="ident" type="text" autocomplete="email" inputmode="email" placeholder="you@example.com or 12345678">'
+      + '<input class="hp" type="text" name="website" id="hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
+      + '<div class="err" id="err"></div><button class="btn" id="send">Email me a sign-in link</button>'
+      + '<p class="fine">The link goes only to the email on your APA record.</p>';
+    $('send').onclick = async () => {
+      const v = $('ident').value.trim(); if (!v) { $('err').textContent = 'Enter your email or APA number.'; return; }
+      $('send').disabled = true; $('err').textContent = '';
+      const r = await gas('sr_link_request', { identifier: v, hp: $('hp').value });
+      if (!r.ok) { $('err').textContent = r.error || 'Something went wrong.'; $('send').disabled = false; return; }
+      app.innerHTML = '<h2 style="margin:0 0 6px">Check your email' + (r.first_name ? ', ' + esc(r.first_name) : '') + '.</h2><p class="lead">We sent a sign-in link to the address on your APA record. It works for 30 minutes and keeps you signed in on this device.</p><button class="btn ghost" id="again">Use a different email or number</button>';
+      $('again').onclick = () => showLogin();
+    };
+  }
+  function showHome() {
+    $('ctl').hidden = false; $('whoami').textContent = S.firstName ? 'Signed in as ' + S.firstName : 'Signed in';
+    S.kind = null; S.team = null; S.forTeam = false; S.opened = Date.now();
+    app.innerHTML = '<div class="center" style="padding:20px;text-align:center"><span class="spin"></span></div>';
+    gas('sr_context', { token: S.token }).then(r => {
+      if (!r.ok) return handleSessionErr(r.error);
+      S.me = r.me;
+      if (S.me.teams.length === 1) S.team = S.me.teams[0];
+      renderForm();
+      gas('sr_my', { token: S.token }).then(m => {
+        if (!m.ok || !m.requests || !m.requests.length || !$('mine')) return;
+        $('mine').innerHTML = '<span class="lbl" style="margin-top:22px">What you have asked for</span>' + m.requests.map(q =>
+          '<div class="row"><span class="tag ' + esc(q.status) + '">' + esc(STATUS_LABEL[q.status] || q.status) + '</span> '
+          + esc(q.need.length > 90 ? q.need.slice(0, 90) + '...' : q.need)
+          + ' <span class="sub" style="margin:0">' + new Date(q.created_at).toLocaleDateString() + '</span>'
+          + (q.operator_note ? '<div class="sub" style="margin:4px 0 0">' + esc(q.operator_note) + '</div>' : '') + '</div>').join('');
+      });
+    });
+  }
+  function renderForm() {
+    const teams = (S.me && S.me.teams) || [];
+    app.innerHTML = '<p class="lead">What do you need? Nameplate, patch, trophy, jacket, scoresheets, anything. Tell us in your own words.</p>'
+      + '<p class="lead"><b>Send one thing per request.</b> We turn these into order lists, so a request with three things on it lands on none of them. Need three things? Send three. It takes ten seconds and you hear back on each one.</p>'
+      + '<label class="lbl" for="need">What do you need?</label><textarea id="need" maxlength="4000" placeholder="A nameplate for team 2704. Just the one thing."></textarea>'
+      + '<label class="lbl">What kind of thing is it? <small>optional</small></label><p class="sub">Only so it reaches the right person faster. Skip it if nothing fits.</p>'
+      + '<div class="chips" id="kinds">' + KINDS.map(k => '<button type="button" class="chip" data-v="' + k[0] + '" aria-pressed="false">' + esc(k[1]) + '</button>').join('') + '</div>'
+      + (teams.length > 1 ? '<label class="lbl">Which team is it for? <small>optional</small></label><div class="chips" id="teams">'
+          + teams.map((t, i) => '<button type="button" class="chip" data-i="' + i + '" aria-pressed="false">' + esc(t.label || t.team_name) + (t.night ? ' <span class="sub" style="margin:0">' + esc(t.night.slice(0, 3)) + '</span>' : '') + '</button>').join('') + '</div>' : '')
+      + '<div class="chips" style="margin-top:12px"><button type="button" class="chip" id="forTeam" aria-pressed="false">It is for the whole team</button></div>'
+      + '<input class="hp" type="text" name="website" id="hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
+      + '<div class="err" id="err"></div><div class="need" id="hint" aria-live="polite"></div>'
+      + '<button class="btn" id="submit" disabled>Send it</button>'
+      + '<p class="fine">Goes straight to the league office. You will hear back either way.</p>'
+      + '<div id="mine" class="card-list"></div>';
+    $('need').addEventListener('input', sync);
+    $('kinds').querySelectorAll('.chip').forEach(b => b.onclick = () => {
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      $('kinds').querySelectorAll('.chip').forEach(o => o.setAttribute('aria-pressed', 'false'));
+      b.setAttribute('aria-pressed', on ? 'true' : 'false'); S.kind = on ? b.dataset.v : null; sync();
+    });
+    if ($('teams')) $('teams').querySelectorAll('.chip').forEach(b => b.onclick = () => {
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      $('teams').querySelectorAll('.chip').forEach(o => o.setAttribute('aria-pressed', 'false'));
+      b.setAttribute('aria-pressed', on ? 'true' : 'false'); S.team = on ? teams[+b.dataset.i] : null; sync();
+    });
+    $('forTeam').onclick = () => { S.forTeam = $('forTeam').getAttribute('aria-pressed') !== 'true'; $('forTeam').setAttribute('aria-pressed', S.forTeam ? 'true' : 'false'); sync(); };
+    $('submit').onclick = submit;
+    sync();
+  }
+  /* Desktop rail — a live mirror of the request (spm-base .spm-rail; display:none below 1200px). */
+  function renderRail() {
+    const rail = $('rail'); if (!rail) return;
+    if (!S.token || !S.me) { rail.innerHTML = ''; return; }
+    const row = (k, v) => '<dt>' + k + '</dt><dd' + (v ? '>' + v : ' class="spm-rail-empty">not yet') + '</dd>';
+    const need = ($('need') && $('need').value.trim()) || '';
+    const kindLabel = S.kind ? (KINDS.find(k => k[0] === S.kind) || [])[1] : '';
+    rail.innerHTML = '<div class="spm-rail-card"><h3>Your request so far</h3><dl>'
+      + row('You need', need ? esc(need.length > 70 ? need.slice(0, 70) + '...' : need) : '')
+      + row('Kind', kindLabel ? esc(kindLabel) : '')
+      + row('Team', S.team ? esc(S.team.label || S.team.team_name) + (S.forTeam ? ' (whole team)' : '') : (S.forTeam ? 'the whole team' : ''))
+      + '</dl><p class="spm-rail-note"><b>Say it however you want.</b> There is no list to pick from and no wrong way to ask. If we need more we will email you.</p></div>';
+  }
+  function sync() {
+    renderRail();
+    const need = ($('need') && $('need').value.trim()) || '';
+    const missing = [];
+    if (!need.length) missing.push('tell us what you need');
+    if ($('hint')) $('hint').innerHTML = missing.length ? '<b>Still needed:</b> ' + missing.join(' &middot; ') : '';
+    if ($('submit')) $('submit').disabled = !need.length;
+  }
+  async function submit() {
+    const err = $('err'); err.textContent = ''; $('submit').disabled = true;
+    const r = await gas('sr_submit', { token: S.token, need: $('need').value.trim(), kind: S.kind || '',
+      team_number: S.team ? S.team.team_number : '', for_team: S.forTeam, hp: $('hp').value, fill_ms: Date.now() - S.opened });
+    if (!r.ok) { if (isAuthErr(r.error)) return handleSessionErr(r.error); err.textContent = r.error || 'Something went wrong. Try again.'; sync(); return; }
+    app.innerHTML = '<div style="text-align:center;padding:16px 4px"><div style="font-size:2.4rem">🎱</div><h2 style="margin:6px 0">Got it' + (r.id ? '. Request #' + esc(r.id) : '.') + '</h2>'
+      + '<p class="lead">Someone in the league office will sort it and let you know either way. There is a receipt in your email. Reply to it with a photo or anything else that helps.</p>'
+      + '<button class="btn ghost" id="home">Done</button></div>';
+    $('home').onclick = showHome;
+  }
+
+  /* ── session ── */
+  /* only the auth sentences log you out; an ordinary error is not a session problem */
+  const isAuthErr = e => spmAuth.isAuthErr(e);
+  function handleSessionErr(msg) { spmAuth.clear(); S.token = null; S.me = null; showLogin(msg || 'Your session expired. Sign in again.'); }
+  $('logout').onclick = () => { spmAuth.logout(S.token); S.token = null; S.firstName = ''; S.me = null; showLogin(); };
+  function boot() {
+    const urlToken = new URLSearchParams(location.search).get('token');
+    const stored = spmAuth.get();
+    const tok = urlToken || stored;
+    if (urlToken) history.replaceState(null, '', location.pathname);
+    if (!tok) { showLogin(); return; }
+    app.innerHTML = '<div style="padding:20px;text-align:center"><span class="spin"></span><p class="sub" style="margin-top:12px">Signing you in…</p></div>';
+    gas('sr_verify', { token: tok }).then(r => {
+      if (!r.ok) { if (!urlToken || spmAuth.isAuthErr(r.error)) spmAuth.clear(); showLogin(urlToken ? (r.error || 'That link did not work. Request a fresh one.') : ''); return; }
+      S.token = tok; S.firstName = r.first_name || ''; spmAuth.set(tok);
+      showHome();
+    });
+  }
+
+  /* ── Auto-updater (checkVersion → pollForDeploy; reference_deploy.md) ── */
+  function cmpVer(a, b) { const pa = String(a).split('.'), pb = String(b).split('.'); for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const x = parseInt(pa[i], 10) || 0, y = parseInt(pb[i], 10) || 0; if (x > y) return 1; if (x < y) return -1; } return 0; }
+  let _versionMismatch = false;
+  async function checkVersion() {
+    try { const r = await fetch(SB_URL + '/rest/v1/apps?app_name=eq.' + APP_NAME + '&select=version', { headers: { apikey: ANON, Authorization: 'Bearer ' + ANON, 'Accept-Profile': 'apa_core' } }); const rows = await r.json(); const v = rows && rows[0] && rows[0].version;
+      if (v && cmpVer(v, window.APP_VERSION) > 0 && !_versionMismatch) { if (document.querySelector('#need') && $('need').value) return; _versionMismatch = true; $('updateOverlay').classList.add('show'); pollForDeploy(); } } catch (e) {}
+  }
+  function pollForDeploy() { const t = setInterval(async () => { try { const r = await fetch('version.js?_=' + Date.now(), { cache: 'no-store' }); const m = (await r.text()).match(/APP_VERSION\s*=\s*'([^']+)'/); if (m && cmpVer(m[1], window.APP_VERSION) > 0) { clearInterval(t); location.reload(); } } catch (e) {} }, 15000); }
+  setInterval(checkVersion, 30000);
+  spmAuth.onChange(function(t){ if((t||'')!==(S.token||'')) location.reload(); });   /* SSO: another app signed in or out */
+  boot();
+</script>
+</body>
+</html>
