@@ -96,7 +96,7 @@
   function showLogin(msg) {
     renderRail();                     /* the signed-out screen keeps no trace of the last person's work */
     $('ctl').hidden = true;
-    app.innerHTML = '<p class="lead">Missing a nameplate, a patch, a trophy, a jacket, anything at all? Tell us here and we will sort it. Sign in with the email or APA number on your record. We send a link, no password.</p>'
+    app.innerHTML = '<p class="lead">Missing a nameplate, a patch, a trophy, a jacket, anything at all? Tell us here and we will sort it. One thing per request, so it lands on the right list. Sign in with the email or APA number on your record. We send a link, no password.</p>'
       + (msg ? '<div class="err" style="margin-bottom:8px">' + esc(msg) + '</div>' : '')
       + '<label class="lbl" for="ident">Your email or APA number</label><input id="ident" type="text" autocomplete="email" inputmode="email" placeholder="you@example.com or 12345678">'
       + '<input class="hp" type="text" name="website" id="hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
@@ -132,8 +132,9 @@
   }
   function renderForm() {
     const teams = (S.me && S.me.teams) || [];
-    app.innerHTML = '<p class="lead">What do you need? Nameplate, patch, trophy, jacket, scoresheets, anything. Tell us in your own words and we will take it from there.</p>'
-      + '<label class="lbl" for="need">What do you need?</label><textarea id="need" maxlength="4000" placeholder="I never got my 2nd place plaque from spring."></textarea>'
+    app.innerHTML = '<p class="lead">What do you need? Nameplate, patch, trophy, jacket, scoresheets, anything. Tell us in your own words.</p>'
+      + '<p class="lead"><b>Send one thing per request.</b> We turn these into order lists, so a request with three things on it lands on none of them. Need three things? Send three. It takes ten seconds and you hear back on each one.</p>'
+      + '<label class="lbl" for="need">What do you need?</label><textarea id="need" maxlength="4000" placeholder="A nameplate for team 2704. Just the one thing."></textarea>'
       + '<label class="lbl">What kind of thing is it? <small>optional</small></label><p class="sub">Only so it reaches the right person faster. Skip it if nothing fits.</p>'
       + '<div class="chips" id="kinds">' + KINDS.map(k => '<button type="button" class="chip" data-v="' + k[0] + '" aria-pressed="false">' + esc(k[1]) + '</button>').join('') + '</div>'
       + (teams.length > 1 ? '<label class="lbl">Which team is it for? <small>optional</small></label><div class="chips" id="teams">'
