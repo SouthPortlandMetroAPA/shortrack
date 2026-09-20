@@ -51,6 +51,15 @@
   .card-list .row{ border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px; font-size:.92rem; }
   .tag{ display:inline-block; font-size:.7rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; padding:2px 8px; border-radius:999px; background:#fff3cd; color:#7a5a00; }
   .tag.working{ background:#e7edfb; color:#0031a1; } .tag.done{ background:#e6f7ec; color:#0a7d33; } .tag.declined{ background:#f1f3f5; color:#4b5563; }
+  /* the one-thing note - a modal on top of the form (FairPlay / SkillCheck pattern) */
+  .note-back{ position:fixed; inset:0; background:rgba(20,30,50,.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:16px; overflow-y:auto; }
+  /* once the card is taller than the screen, stop centring it: a fixed overlay does not scroll with the page and
+     centring pushes the button out of reach. Observed at 740x360 before this was added. */
+  @media (max-height:560px){ .note-back{ align-items:flex-start; } }
+  .note{ background:#fff; border-radius:18px; max-width:420px; width:100%; padding:20px 20px 18px; box-shadow:0 12px 40px rgba(0,0,0,.25); margin:auto; }
+  .note h2{ margin:0 0 10px; font-size:1.15rem; }
+  .note p{ margin:0 0 12px; font-size:17px; line-height:1.5; }   /* 17px: bigger reads faster at a glance */
+  .note .btn{ margin-top:6px; }
   .spin{ display:inline-block; width:26px; height:26px; border:3px solid #e5e7eb; border-top-color:var(--spm-primary); border-radius:50%; animation:spin 1s linear infinite; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
   .need{ margin:10px 0 0; font-size:.88rem; line-height:1.45; color:#7a5a00; background:#fff8e1; border:1px solid #f0e0a8; border-radius:10px; padding:8px 10px; }
@@ -85,7 +94,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   /* GAS: text/plain body, never application/json (CORS preflight GAS cannot answer) */
   const gas = (action, extra) => fetch(GAS_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action }, extra || {})) }).then(r => r.json()).catch(() => ({ ok: false, error: 'Network hiccup. Check your connection and try again.' }));
-  const S = { token: null, firstName: '', me: null, kind: null, team: null, forTeam: false, opened: Date.now() };
+  const S = { token: null, firstName: '', me: null, kind: null, team: null, forTeam: false, acked: false, opened: Date.now() };
   const app = $('app');
   /* A ROUTING hint, never the record. The thing people need is whatever they typed. */
   const KINDS = [['patch', 'Patch or award'], ['nameplate', 'Nameplate'], ['trophy', 'Trophy or plaque'],
@@ -113,13 +122,13 @@
   }
   function showHome() {
     $('ctl').hidden = false; $('whoami').textContent = S.firstName ? 'Signed in as ' + S.firstName : 'Signed in';
-    S.kind = null; S.team = null; S.forTeam = false; S.opened = Date.now();
+    S.kind = null; S.team = null; S.forTeam = false; S.acked = false; S.opened = Date.now();
     app.innerHTML = '<div class="center" style="padding:20px;text-align:center"><span class="spin"></span></div>';
     gas('sr_context', { token: S.token }).then(r => {
       if (!r.ok) return handleSessionErr(r.error);
       S.me = r.me;
       if (S.me.teams.length === 1) S.team = S.me.teams[0];
-      renderForm();
+      showNote();
       gas('sr_my', { token: S.token }).then(m => {
         if (!m.ok || !m.requests || !m.requests.length || !$('mine')) return;
         $('mine').innerHTML = '<span class="lbl" style="margin-top:22px">What you have asked for</span>' + m.requests.map(q =>
@@ -130,10 +139,24 @@
       });
     });
   }
+  /* The note every request passes through. One idea per paragraph, each with a bold lead that carries the
+     meaning on its own, so it reads at a glance. Same markup and classes as FairPlay and SkillCheck. */
+  function showNote() {
+    S.acked = false;
+    const back = document.createElement('div'); back.className = 'note-back'; back.id = 'noteBack';
+    back.setAttribute('role', 'dialog'); back.setAttribute('aria-modal', 'true'); back.setAttribute('aria-labelledby', 'noteTitle');
+    back.innerHTML = '<div class="note"><h2 id="noteTitle">Before you start</h2>'
+      + '<p><b>Send one thing per request.</b> We turn these into order lists. A request with three things on it lands on none of them.</p>'
+      + '<p><b>Need three things? Send three.</b> It takes ten seconds and you hear back on each one.</p>'
+      + '<button class="btn" id="gotit">Got it</button></div>';
+    document.body.appendChild(back);
+    renderForm();
+    $('gotit').onclick = () => { S.acked = true; back.remove(); sync(); $('need').focus(); };
+    $('gotit').focus();
+  }
   function renderForm() {
     const teams = (S.me && S.me.teams) || [];
     app.innerHTML = '<p class="lead">What do you need? Nameplate, patch, trophy, jacket, scoresheets, anything. Tell us in your own words.</p>'
-      + '<p class="lead"><b>Send one thing per request.</b> We turn these into order lists, so a request with three things on it lands on none of them. Need three things? Send three. It takes ten seconds and you hear back on each one.</p>'
       + '<label class="lbl" for="need">What do you need?</label><textarea id="need" maxlength="4000" placeholder="A nameplate for team 2704. Just the one thing."></textarea>'
       + '<label class="lbl">What kind of thing is it? <small>optional</small></label><p class="sub">Only so it reaches the right person faster. Skip it if nothing fits.</p>'
       + '<div class="chips" id="kinds">' + KINDS.map(k => '<button type="button" class="chip" data-v="' + k[0] + '" aria-pressed="false">' + esc(k[1]) + '</button>').join('') + '</div>'
@@ -178,8 +201,9 @@
     const need = ($('need') && $('need').value.trim()) || '';
     const missing = [];
     if (!need.length) missing.push('tell us what you need');
+    if (!S.acked) missing.push('tap Got it on the note');
     if ($('hint')) $('hint').innerHTML = missing.length ? '<b>Still needed:</b> ' + missing.join(' &middot; ') : '';
-    if ($('submit')) $('submit').disabled = !need.length;
+    if ($('submit')) $('submit').disabled = !(need.length && S.acked);
   }
   async function submit() {
     const err = $('err'); err.textContent = ''; $('submit').disabled = true;
